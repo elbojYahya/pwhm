@@ -249,7 +249,9 @@ define rrm_t{
 		%read-only uint32 Index;
 
 		/* The name of the Radio used by this AccessPoint */
-		%read-only string RadioReference;
+		%read-only string RadioReference {
+			on action write call set_object_ref_simple;
+		}
 
 		/** The value MUST be the path name of a row in the SSID table.
 		 *  If the referenced object is deleted, the parameter value

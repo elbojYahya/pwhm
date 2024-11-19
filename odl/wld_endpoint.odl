@@ -187,6 +187,7 @@
 		 *  active profile, which specifies the SSID and security
 		 *  settings to be used by the end point.*/
 		%persistent string ProfileReference {
+			on action write call set_object_ref_simple;
 			default "";
 			userflags %upc;
 		}
@@ -198,10 +199,14 @@
 		 *  string if ProfileReference  is an empty string (i.e. only
 		 *  when an active profile is assigned can the associated SSID
 		 *  interface be determined).*/
-		%persistent string SSIDReference;
+		%persistent string SSIDReference{
+			on action write call set_object_ref_simple;
+		}
 
 		/* The name of the Radio used by this endpoint */
-		%read-only string RadioReference;
+		%read-only string RadioReference{
+			on action write call set_object_ref_simple;
+		}
 
 		/* The name of the underlying interface of this endpoint */
 		%read-only string IntfName;
