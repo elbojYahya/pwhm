@@ -292,14 +292,18 @@ swl_rc_ne wld_rad_hostapd_reconfigure(T_Radio* pR) {
      */
     rc = SWL_RC_INVALID_PARAM;
     trl = wld_secDmn_getCmdSupp(pSecDmn, "RELOAD_CONFIG");
-    if(trl != SWL_TRL_UNKNOWN) {
-        if(trl == SWL_TRL_TRUE) {
-            rc = wld_wpaCtrl_sendCmdFmtCheckResponse(pIface, "OK", "RELOAD_CONFIG");
-            if(rc == SWL_RC_NOT_AVAILABLE) {
-                rc = SWL_RC_OK;
-            }
+    if(trl != SWL_TRL_FALSE) {
+        rc = wld_wpaCtrl_sendCmdFmtCheckResponse(pIface, "OK", "RELOAD_CONFIG");
+        if(rc == SWL_RC_NOT_AVAILABLE) {
+            rc = SWL_RC_OK;
         }
-        return rc;
+        if((trl == SWL_TRL_UNKNOWN) && (rc >= SWL_RC_ERROR)) {
+            trl = (rc == SWL_RC_OK);
+            wld_secDmn_setCmdSupp(pSecDmn, "RELOAD_CONFIG", trl);
+        }
+        if(trl == SWL_TRL_TRUE) {
+            return rc;
+        }
     }
 
     /*
