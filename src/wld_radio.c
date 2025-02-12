@@ -574,7 +574,16 @@ amxd_status_t _wld_rad_validateOperatingChannelBandwidth_pvf(amxd_object_t* obje
     if((swl_str_matches(currentValue, newValue)) ||
        ((radBw < SWL_RAD_BW_MAX) &&
         ((radBw == SWL_RAD_BW_AUTO) || (swl_chanspec_radBwToInt(radBw) <= swl_chanspec_bwToInt(pRad->maxChannelBandwidth))))) {
-        status = amxd_status_ok;
+	    if ( wld_rad_is_6ghz(pRad) && (radBw == SWL_RAD_BW_320MHZ1 || radBw == SWL_RAD_BW_320MHZ2)) {
+                    if (wld_rad_checkEnabledRadStd(pRad, SWL_RADSTD_BE)) {
+                            status = amxd_status_ok;
+                    } else {
+			    SAH_TRACEZ_ERROR(ME, "cannot support 320MHz bandwidth without BE as operating standard");
+                            status = amxd_status_unknown_error;
+                    }
+            } else {
+                    status = amxd_status_ok;
+            }
     } else {
         SAH_TRACEZ_ERROR(ME, "%s: unsupported operating channel bandwidth(%s / %u / %u)", pRad->Name, newValue,
                          swl_chanspec_radBwToInt(radBw), swl_chanspec_bwToInt(pRad->maxChannelBandwidth));
