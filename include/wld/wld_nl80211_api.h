@@ -72,7 +72,17 @@
 
 #define MLO_LINK_ID_UNKNOWN -1
 #define NL80211_DFLT_IFNAME_PFX "wlan"
+#define MAX_SUPP_RATES_LEN 12
 
+typedef struct {
+    swl_80211_htCapIE_t htCap;
+    swl_80211_vhtCapIE_t vhtCap;
+    swl_80211_heCapIE_t heCap;
+    swl_80211_ehtCapIE_t ehtCap;
+
+    uint8_t supported_rates[MAX_SUPP_RATES_LEN];
+    uint8_t supported_rates_len;
+} raw_dev_ies_t;
 /*
  * @brief return registered handlers table, defining wld implementation for nl80211
  *
@@ -767,5 +777,24 @@ const wld_nl80211_ifaceMloLinkInfo_t* wld_nl80211_getIfaceMloLinkAtPos(wld_nl802
  *         <= SWL_RC_ERROR otherwise
  */
 swl_rc_ne wld_nl80211_findMldIfaceByLinkMac(wld_nl80211_state_t* state, swl_macBin_t* pLinkMac, wld_nl80211_ifaceInfo_t* pIface, int32_t* pLinkId);
+
+/*
+ * @brief Manually add a station
+ *
+ * @param state nl80211 socket manager context
+ * @param iface_idx The index of the interface to add the station to
+ * @param mac The MAC address of the station
+ * @param assoc_req_data The association request data corresponding to the station. Used to set the capabilities and other info.
+ * @param assoc_req_len The length of the association request data
+ * @param aid The association ID of the station
+ * @param flags The bitmask of flags to set for the station (e.g. `NL80211_STA_FLAG_AUTHORIZED`, `NL80211_STA_FLAG_ASSOCIATED`)
+ *
+ * @note The `NL80211_CMD_NEW_STATION` command will fail with an `EINVAL` error if the `NL80211_STA_FLAG_ASSOCIATED` flag is "set"
+ *  and the `NL80211_FEATURE_FULL_AP_CLIENT_STATE` feature is not supported by the driver.
+ *
+ * @return SWL_RC_OK in case of success
+ *         <= SWL_RC_ERROR otherwise
+ */
+swl_rc_ne wld_nl80211_addStation(wld_nl80211_state_t* state, uint32_t iface_idx, swl_macBin_t* mac, uint8_t* assoc_req_data, size_t assoc_req_len, uint16_t aid, uint16_t flags);
 
 #endif /* INCLUDE_WLD_WLD_NL80211_API_H_ */

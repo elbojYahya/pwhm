@@ -72,7 +72,9 @@
 
 #include "swl/swl_common.h"
 #include "swl/swl_assert.h"
+#include "swl/swl_hex.h"
 #include "swla/swla_mac.h"
+#include "swl/swl_genericFrameParser.h"
 
 #define ME "nlApi"
 #define NL80211_WLD_VENDOR_NAME "nl80211"
@@ -1276,6 +1278,105 @@ swl_rc_ne wld_nl80211_findMldIfaceByLinkMac(wld_nl80211_state_t* state, swl_macB
         }
     }
     W_SWL_FREE(requestData.pIfaces);
+    return rc;
+}
+
+static void s_parseRawDevIE(void* pUserData, swl_parsingArgs_t* pParsingArgs _UNUSED, swl_80211_elId_ne elId, uint8_t len, uint8_t* frm) {
+    raw_dev_ies_t* pRawDevIE = (raw_dev_ies_t*) pUserData;
+
+    switch(elId) {
+    case SWL_80211_EL_ID_HT_CAP:
+        memcpy(&pRawDevIE->htCap, (swl_80211_htCapIE_t*) frm, len);
+        break;
+    case SWL_80211_EL_ID_VHT_CAP:
+        memcpy(&pRawDevIE->vhtCap, (swl_80211_vhtCapIE_t*) frm, len);
+        break;
+    case SWL_80211_EL_ID_SUP_RATES:
+        pRawDevIE->supported_rates_len = len;
+        memcpy(&pRawDevIE->supported_rates, frm, len); // Copy over raw supported rates data
+    default:
+        break;
+    }
+}
+
+
+SWL_TABLE(rawAssocRequestIEParseTable,
+          ARR(uint8_t index; void* val; ),
+          ARR(swl_type_uint8, swl_type_voidPtr),
+          ARR(
+              {SWL_80211_EL_ID_HT_CAP, (void*) s_parseRawDevIE},
+              {SWL_80211_EL_ID_VHT_CAP, (void*) s_parseRawDevIE},
+              {SWL_80211_EL_ID_SUP_RATES, (void*) s_parseRawDevIE},
+              )
+          );
+
+swl_rc_ne wld_nl80211_addStation(wld_nl80211_state_t* state, uint32_t iface_idx, swl_macBin_t* mac, uint8_t* assoc_req_data,
+                                 size_t assoc_req_len, uint16_t aid, uint16_t flags) {
+
+    SAH_TRACEZ_IN(ME);
+
+    swl_80211_assocReqFrameBody_t* assoc_req_frame = (swl_80211_assocReqFrameBody_t*) assoc_req_data;
+    uint16_t capability = assoc_req_frame->capInfo;
+    uint16_t listen_interval = assoc_req_frame->listenInterval;
+    // Parse IEs for the rest
+    raw_dev_ies_t rawIEs;
+    memset(&rawIEs, 0, sizeof(rawIEs));
+    ssize_t parsedLen = swl_80211_parseCustomInfoElementsBuffer(&rawIEs, &rawAssocRequestIEParseTable, NULL,
+                                                                assoc_req_len - offsetof(swl_80211_assocReqFrameBody_t, data),
+                                                                assoc_req_frame->data);
+
+    char rates_str[rawIEs.supported_rates_len * 2 + 1];
+    memset(rates_str, 0, sizeof(rates_str));
+    swl_hex_fromBytes(rates_str, sizeof(rates_str), rawIEs.supported_rates, rawIEs.supported_rates_len, false);
+
+    char ht_cap_str[sizeof(rawIEs.htCap) * 2 + 1];
+    memset(ht_cap_str, 0, sizeof(ht_cap_str));
+    swl_hex_fromBytes(ht_cap_str, sizeof(ht_cap_str), (uint8_t*) &rawIEs.htCap, sizeof(rawIEs.htCap), false);
+
+    char vht_cap_str[sizeof(rawIEs.vhtCap) * 2 + 1];
+    memset(vht_cap_str, 0, sizeof(vht_cap_str));
+    swl_hex_fromBytes(vht_cap_str, sizeof(vht_cap_str), (uint8_t*) &rawIEs.vhtCap, sizeof(rawIEs.vhtCap), false);
+
+    struct nl80211_sta_flag_update sta_flags = {0};
+    sta_flags.set = flags;
+    sta_flags.mask = flags;
+
+    SAH_TRACEZ_INFO(ME, "Adding station with MAC '" SWL_MAC_FMT "' to interface '%d' with AID '%d'", SWL_MAC_ARG(mac->bMac), iface_idx, aid);
+    SAH_TRACEZ_INFO(ME, "Capability: %x, Listen Interval: %d, Flags: %u", capability, listen_interval, sta_flags.set);
+    SAH_TRACEZ_INFO(ME, "Supported Rates: %s, HT Capabilities: %s, VHT Capabilities: %s", rates_str, ht_cap_str, vht_cap_str);
+
+    // Setup NL80211 attributes
+    NL_ATTRS(attribs,
+             ARR(NL_ATTR_VAL(NL80211_ATTR_IFINDEX, iface_idx),
+                 NL_ATTR_DATA(NL80211_ATTR_MAC, ETHER_ADDR_LEN, mac->bMac),
+                 NL_ATTR_DATA(NL80211_ATTR_STA_SUPPORTED_RATES, rawIEs.supported_rates_len, rawIEs.supported_rates),
+                 NL_ATTR_DATA(NL80211_ATTR_STA_FLAGS2, sizeof(sta_flags), &sta_flags),
+                 NL_ATTR_VAL(NL80211_ATTR_STA_AID, aid),
+                 NL_ATTR_VAL(NL80211_ATTR_STA_LISTEN_INTERVAL, listen_interval),
+                 NL_ATTR_VAL(NL80211_ATTR_STA_CAPABILITY, capability)
+                 ));
+
+    if(rawIEs.htCap.htCapInfo != 0) {
+        NL_ATTRS_ADD(&attribs, NL_ATTR_DATA(NL80211_ATTR_HT_CAPABILITY, sizeof(rawIEs.htCap), &rawIEs.htCap));
+    }
+    if((rawIEs.vhtCap.vhtCapInfo != 0) && NL80211_ATTR_IS_SPECIFIED(NL80211_ATTR_VHT_CAPABILITY)) {
+        NL_ATTRS_ADD(&attribs, NL_ATTR_DATA(NL80211_ATTR_VHT_CAPABILITY, sizeof(rawIEs.vhtCap), &rawIEs.vhtCap));
+    }
+
+    if((rawIEs.heCap.heCaps != 0) && NL80211_ATTR_IS_SPECIFIED(NL80211_ATTR_HE_CAPABILITY)) {
+        NL_ATTRS_ADD(&attribs, NL_ATTR_DATA(NL80211_ATTR_HE_CAPABILITY, sizeof(rawIEs.heCap), &rawIEs.heCap));
+    }
+
+    // Check that `rawIEs.ehtCap` is not empty before adding it to the attributes
+    uint8_t zero_buf[sizeof(rawIEs.ehtCap)] = {0};
+    if((memcmp((uint8_t*) &rawIEs.ehtCap, zero_buf, sizeof(rawIEs.ehtCap)) != 0) && NL80211_ATTR_IS_SPECIFIED(NL80211_ATTR_EHT_CAPABILITY)) {
+        NL_ATTRS_ADD(&attribs, NL_ATTR_DATA(NL80211_ATTR_EHT_CAPABILITY, sizeof(rawIEs.ehtCap), &rawIEs.ehtCap));
+    }
+
+    // Send NL80211_CMD_NEW_STATION command
+    swl_rc_ne rc = wld_nl80211_sendCmdSyncWithAck(state, NL80211_CMD_NEW_STATION, 0, iface_idx, &attribs);
+    NL_ATTRS_CLEAR(&attribs);
+    SAH_TRACEZ_OUT(ME);
     return rc;
 }
 
