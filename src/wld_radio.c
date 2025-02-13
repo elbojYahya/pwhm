@@ -3922,7 +3922,7 @@ void wld_rad_chan_update_model(T_Radio* pRad, amxd_trans_t* trans) {
     /* Do not update OperatingChannelBandwidth dm value when syncing with chanspec read from driver
      * to not be considered as a user config by the OperatingChannelBandwidth dm writer hanlder
      */
-    if((pRad->targetChanspec.chanspec.channel != 0) && (pRad->channelBandwidthChangeReason != CHAN_REASON_INITIAL)) {
+    if((pRad->targetChanspec.chanspec.channel != 0) && ((pRad->channelBandwidthChangeReason != CHAN_REASON_INITIAL) || (pRad->operatingChannelBandwidth != pRad->runningChannelBandwidth))) {
         amxd_trans_set_cstring_t(targetTrans, "OperatingChannelBandwidth", swl_radBw_str[pRad->operatingChannelBandwidth]);
     }
     amxd_trans_set_cstring_t(targetTrans, "CurrentOperatingChannelBandwidth", swl_radBw_str[pRad->runningChannelBandwidth]);
