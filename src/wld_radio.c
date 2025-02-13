@@ -209,6 +209,36 @@ const char* radCounterDefaults[WLD_RAD_EV_MAX] = {
     "",
 };
 
+typedef struct {
+    char* driver;
+    char* vendor;
+} T_Driver2Vendor;
+
+const T_Driver2Vendor driver2Vendor[] = {
+    { "/ath", "Qualcomm"},
+    {"/mtlk", "MaxLinear"},
+
+    {NULL, NULL}
+};
+
+static char* getChipsetVendor(char* radioName) {
+    ASSERT_NOT_NULL(radioName, NULL, ME, "Radio Name is NULL");
+    const char* pathPrefix = "/sys/class/net/";
+    const char* pathSuffix = "/device/driver/";
+    char path[512] = {0};
+
+    snprintf(path, sizeof(path), "%s%s%s", pathPrefix, radioName, pathSuffix);
+    char* driver = strrchr(realpath(path, NULL), '/');
+    for(int i = 0; driver2Vendor[i].driver != NULL; i++) {
+        if(strstr(driver, driver2Vendor[i].driver) != NULL) {
+            SAH_TRACEZ_INFO(ME, "Driver(%s) to Vendor(%s) mapping found", driver, driver2Vendor[i].vendor);
+            return driver2Vendor[i].vendor;
+        }
+    }
+    SAH_TRACEZ_INFO(ME, "No mapping found for Driver(%s)", driver);
+    return NULL;
+}
+
 static amxd_status_t _linkFirstUinitRadio(amxd_object_t* pRadioObj, swl_freqBandExt_e band, int32_t wiPhyId) {
 
     ASSERT_NOT_NULL(pRadioObj, amxd_status_unknown_error, ME, "NULL");
@@ -1899,6 +1929,7 @@ void syncData_Radio2OBJ(amxd_object_t* object, T_Radio* pR, int set) {
 
         amxd_trans_set_cstring_t(&trans, "VendorPCISig", pR->vendor->name);
         amxd_trans_set_cstring_t(&trans, "Name", pR->Name);
+        amxd_trans_set_cstring_t(&trans, "ChipsetVendor", getChipsetVendor(pR->Name));
 
         wld_util_initCustomAlias(&trans, object);
 
