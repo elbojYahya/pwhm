@@ -3,6 +3,7 @@
         object SSID {
 {% let apindex = 0 %}
 {% for ( let Itf in BD.Interfaces ) : if ( BDfn.isInterfaceWirelessAp(Itf.Name) ) : %}
+{% if (BDfn.isInterfaceLan(Itf.Name)) : %}
 {% if (Itf.OperatingFrequency != "") : %}
 {% apindex = BDfn.getInterfaceIndex(Itf.Name, "wireless") %}
             instance add ({{apindex + 1}}, "{{Itf.Alias}}") {
@@ -16,22 +17,25 @@ if (RadioIndex >= 0) : %}
 {% endif %}
             }
 {% endif %}
+{% endif %}
 {% endif; endfor; %}
         }
         object AccessPoint {
 {% let apindex = 0 %}
 {% for ( let Itf in BD.Interfaces ) : if ( BDfn.isInterfaceWirelessAp(Itf.Name) ) : %}
+{% if (BDfn.isInterfaceLan(Itf.Name)) : %}
 {% if (Itf.OperatingFrequency != "") : %}
 {% apindex = BDfn.getInterfaceIndex(Itf.Name, "wireless")  %}
 {% if ( Itf.SSID != "" ) : %}
             instance add ("{{Itf.Alias}}") {
                 parameter SSIDReference = "Device.WiFi.SSID.{{apindex + 1}}.";
-                parameter Enable = 0;
 {% if (BDfn.isInterfaceGuest(Itf.Name)) : %}
                 parameter DefaultDeviceType = "Guest";
+                parameter Enable = 0;
 {% elif (BDfn.isInterfaceLan(Itf.Name)) : %}
                 parameter IEEE80211kEnabled = 1;
                 parameter MultiAPType = "FronthaulBSS,BackhaulBSS";
+                parameter Enable = 1;
 {% if ((Itf.OperatingFrequency == "5GHz") || (Itf.OperatingFrequency == "6GHz")) : %}
                 parameter WDSEnable = 1;
 {% endif %}
@@ -61,6 +65,7 @@ if (RadioIndex >= 0) : %}
 {% endif %}
                 }
             }
+{% endif %}
 {% endif %}
 {% endif %}
 {% endif; endfor; %}

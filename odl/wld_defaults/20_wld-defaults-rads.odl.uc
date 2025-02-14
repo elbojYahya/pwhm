@@ -25,6 +25,7 @@
             instance add ("{{Radio.Alias}}") {
                 parameter OperatingFrequencyBand = "5GHz";
                 parameter Enable = 1;
+                parameter Channel = 36;
                 parameter IEEE80211hEnabled = true;
                 parameter RegulatoryDomain = "DE";
                 parameter AP_Mode = 1;
