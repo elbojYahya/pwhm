@@ -164,23 +164,39 @@ bool wld_hostapd_createConfig(wld_hostapd_config_t** pConf, T_Radio* pRad) {
     *pConf = config;
     swl_mapChar_t* radConfigMap = wld_hostapd_getConfigMap(config, NULL);
     wld_hostapd_cfgFile_setRadioConfig(pRad, radConfigMap);
+
+    /*
+     * sort active vaps to be saved
+     * 1- pure backhaul vaps
+     * 2- other vaps
+     */
+    swl_unLiList_t aVaps;
+    swl_unLiList_init(&aVaps, sizeof(T_AccessPoint*));
     T_AccessPoint* pTmpAp = NULL;
-    swl_mapChar_t* defMultiAPConfig = NULL;
-    amxc_llist_for_each(it, &config->vaps) {
-        wld_hostapdVapInfo_t* vapInfo = NULL;
-        if((vapInfo = amxc_llist_it_get_data(it, wld_hostapdVapInfo_t, it)) != NULL) {
-            pTmpAp = wld_getAccesspointByAddress(vapInfo->bssid.bMac);
-            if((pTmpAp != NULL) && (wld_hostapd_ap_needWpaCtrlIface(pTmpAp))) {
-                swl_mapChar_t* multiAPConfig = defMultiAPConfig;
-                swl_mapChar_t* vapConfigMap = wld_hostapd_getConfigMapByBssid(config, (swl_macBin_t*) pTmpAp->pSSID->BSSID);
-                if(SWL_BIT_IS_ONLY_SET(pTmpAp->multiAPType, MULTIAP_BACKHAUL_BSS)) {
-                    defMultiAPConfig = defMultiAPConfig ? : vapConfigMap;
-                    multiAPConfig = vapConfigMap;
-                }
-                wld_hostapd_cfgFile_setVapConfig(pTmpAp, vapConfigMap, multiAPConfig);
-            }
+    wld_rad_forEachAp(pTmpAp, pRad) {
+        if(wld_hostapd_ap_needWpaCtrlIface(pTmpAp)) {
+            bool isPureBkh = SWL_BIT_IS_ONLY_SET(pTmpAp->multiAPType, MULTIAP_BACKHAUL_BSS);
+            swl_unLiList_insert(&aVaps, isPureBkh - 1, &pTmpAp);
         }
     }
+
+    /*
+     * save vaps config:
+     */
+    swl_mapChar_t* defMultiAPConfig = NULL;
+    swl_unLiListIt_t it;
+    swl_unLiList_for_each(it, &aVaps) {
+        if((pTmpAp = *(swl_unLiList_data(&it, T_AccessPoint * *))) != NULL) {
+            swl_mapChar_t* multiAPConfig = defMultiAPConfig;
+            swl_mapChar_t* vapConfigMap = wld_hostapd_getConfigMapByBssid(config, (swl_macBin_t*) pTmpAp->pSSID->BSSID);
+            if(SWL_BIT_IS_ONLY_SET(pTmpAp->multiAPType, MULTIAP_BACKHAUL_BSS)) {
+                defMultiAPConfig = defMultiAPConfig ? : vapConfigMap;
+                multiAPConfig = vapConfigMap;
+            }
+            wld_hostapd_cfgFile_setVapConfig(pTmpAp, vapConfigMap, multiAPConfig);
+        }
+    }
+    swl_unLiList_destroy(&aVaps);
     SAH_TRACEZ_OUT(ME);
     return true;
 }
